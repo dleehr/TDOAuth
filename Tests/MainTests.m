@@ -40,7 +40,7 @@
                           accessToken:@"ijkl"
                           tokenSecret:@"mnop"];
 }
-+ (NSURLRequest *)makeGenericRequest
++ (NSURLRequest *)makeGenericRequestWithHTTPMethod:(NSString *)method
 {
     return [TDOAuth URLRequestForPath:@"/service"
                            parameters:@{@"foo": @"bar", @"baz": @"bonk"}
@@ -50,7 +50,7 @@
                           accessToken:@"ijkl"
                           tokenSecret:@"mnop"
                                scheme:@"http"
-                        requestMethod:@"BEG"
+                        requestMethod:method
                          dataEncoding:TDOAuthContentTypeUrlEncodedForm
                          headerValues:nil
                       signatureMethod:TDOAuthSignatureMethodHmacSha1];
@@ -166,9 +166,45 @@
               @"Expected header value does does not match");
 }
 
+- (void)testHeadUrl
+{
+    NSURLRequest *headRequest = [TDOAuthTest makeGenericRequestWithHTTPMethod:@"HEAD"];
+
+    NSString *url = [[headRequest URL] absoluteString];
+    XCTAssert([url isEqualToString:@"http://api.example.com/service?foo=bar&baz=bonk"],
+              "url does not match expected value");
+    
+    NSString *contentType = [headRequest valueForHTTPHeaderField: @"Content-Type"];
+    XCTAssertNil(contentType,
+                 @"Content-Type was present when not expected)");
+    
+    NSString *contentLength = [headRequest valueForHTTPHeaderField: @"Content-Length"];
+    XCTAssertNil(contentLength,
+                 @"Content-Length was set when not expected)");
+    
+}
+
+- (void)testDeleteUrl
+{
+    NSURLRequest *deleteRequest = [TDOAuthTest makeGenericRequestWithHTTPMethod:@"DELETE"];
+    
+    NSString *url = [[deleteRequest URL] absoluteString];
+    XCTAssert([url isEqualToString:@"http://api.example.com/service?foo=bar&baz=bonk"],
+              "url does not match expected value");
+    
+    NSString *contentType = [deleteRequest valueForHTTPHeaderField: @"Content-Type"];
+    XCTAssertNil(contentType,
+                 @"Content-Type was present when not expected)");
+    
+    NSString *contentLength = [deleteRequest valueForHTTPHeaderField: @"Content-Length"];
+    XCTAssertNil(contentLength,
+                 @"Content-Length was set when not expected)");
+    
+}
+
 - (void)testGenericCallHasRightMethod
 {
-    NSURLRequest *genericRequest = [TDOAuthTest makeGenericRequest];
+    NSURLRequest *genericRequest = [TDOAuthTest makeGenericRequestWithHTTPMethod:@"BEG"];
     XCTAssert([[genericRequest HTTPMethod] isEqualToString:@"BEG"],
               "method (verb) expected to be BEG");
 }
@@ -349,7 +385,7 @@
 }
 - (void)testGenericHeaderAuthField
 {
-    NSURLRequest *genericRequest = [TDOAuthTest makeGenericRequest];
+    NSURLRequest *genericRequest = [TDOAuthTest makeGenericRequestWithHTTPMethod:@"BEG"];
     NSString *authHeader = [genericRequest valueForHTTPHeaderField:@"Authorization"];
     NSString *expectedHeader = @"OAuth oauth_token=\"ijkl\", "\
     "oauth_nonce=\"static-nonce-for-testing\", "\
@@ -438,6 +474,53 @@
                                               signatureMethod:TDOAuthSignatureMethodHmacSha1];
     XCTAssertNil(genericRequest,
                  @"Expected request to fail with invalid hash function");
+}
+
+- (void)testGenericURLEncoding {
+    NSURLRequest *genericRequest = [TDOAuth URLRequestForPath:@"/service/\\subDirectoryWithBackslash"
+                                                   parameters:@{@"foo": @"bar", @"baz": @"bonk"}
+                                                         host:@"api.example.com"
+                                                  consumerKey:@"abcd"
+                                               consumerSecret:@"efgh"
+                                                  accessToken:@"ijkl"
+                                                  tokenSecret:@"mnop"
+                                                       scheme:@"ftp" // Not really valid, but it lets us test
+                                                requestMethod:@"BEG"
+                                                 dataEncoding:TDOAuthContentTypeUrlEncodedForm
+                                                 headerValues:nil
+                                              signatureMethod:TDOAuthSignatureMethodHmacSha1];
+    NSString *url = [[genericRequest URL] absoluteString];
+    XCTAssertEqualObjects(url, @"ftp://api.example.com/service/%5CsubDirectoryWithBackslash",
+                          "url does not match expected value");
+
+    NSString *authHeader = [genericRequest valueForHTTPHeaderField:@"Authorization"];
+    NSString *expectedHeader = @"OAuth oauth_token=\"ijkl\", "\
+    "oauth_nonce=\"static-nonce-for-testing\", "\
+    "oauth_signature_method=\"HMAC-SHA1\", oauth_consumer_key=\"abcd\", "\
+    "oauth_timestamp=\"1456789012\", oauth_version=\"1.0\", "\
+    "oauth_signature=\"SVHQ336AsUnnwG48LIsyr%2FYDi6A%3D\"";
+    XCTAssertEqualObjects(authHeader, expectedHeader, @"Expected header value does does not match");
+}
+
+- (void)testGetURLEncoding {
+    NSURLRequest *getRequest = [TDOAuth URLRequestForPath:@"/service/\\subDirectoryWithBackslash"
+                                            GETParameters:@{@"foo": @"bar", @"baz": @"bonk"}
+                                                     host:@"api.example.com"
+                                              consumerKey:@"abcd"
+                                           consumerSecret:@"efgh"
+                                              accessToken:@"ijkl"
+                                              tokenSecret:@"mnop"];
+    NSString *url = [[getRequest URL] absoluteString];
+    XCTAssertEqualObjects(url, @"http://api.example.com/service/%5CsubDirectoryWithBackslash?foo=bar&baz=bonk",
+              "url does not match expected value");
+
+    NSString *authHeader = [getRequest valueForHTTPHeaderField:@"Authorization"];
+    NSString *expectedHeader = @"OAuth oauth_token=\"ijkl\", "\
+    "oauth_nonce=\"static-nonce-for-testing\", "\
+    "oauth_signature_method=\"HMAC-SHA1\", oauth_consumer_key=\"abcd\", "\
+    "oauth_timestamp=\"1456789012\", oauth_version=\"1.0\", "\
+    "oauth_signature=\"am5ojjNME7KLGoPwpBBGnAJA3g4%3D\"";
+    XCTAssertEqualObjects(authHeader, expectedHeader, @"Expected header value does does not match");
 }
 
 @end
